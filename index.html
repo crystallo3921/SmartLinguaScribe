@@ -212,7 +212,6 @@
                 <h3 class="text-center"><i class="fas fa-language"></i> 跨语言智能听写训练系统</h3>
             </div>
             <div class="card-body">
-                <!-- TTS设置区域 -->
                 <div class="tts-settings">
                     <h5><i class="fas fa-cog"></i> 语音合成设置</h5>
                     <div class="tts-option">
@@ -230,26 +229,21 @@
                     <div class="tts-option">
                         <label class="form-check-label">
                             <input type="radio" name="ttsOption" value="amazon" class="form-check-input">
-                            Amazon Polly（AI语音，需要配置）
+                            Amazon Polly（AI语音，已配置后端）
                         </label>
-                        <div class="amazon-config" style="display: none;">
-                            <input type="text" class="form-control api-key-input" placeholder="Access Key ID" id="awsAccessKey">
-                            <input type="text" class="form-control api-key-input" placeholder="Secret Access Key" id="awsSecretKey">
-                            <input type="text" class="form-control api-key-input" placeholder="区域（如：us-east-1）" id="awsRegion" value="us-east-1">
-                            
+                        <div class="amazon-config">
                             <div class="voice-selection">
                                 <label>选择音色：</label>
                                 <select class="form-control" id="voiceSelect">
-                                    <option value="">正在加载音色...</option>
+                                    <option value="">请先加载音色...</option>
                                 </select>
                                 <div class="form-check mt-2">
                                     <input type="checkbox" class="form-check-input" id="useNeuralEngine" checked>
                                     <label class="form-check-label" for="useNeuralEngine">使用神经引擎（更自然）</label>
                                 </div>
                             </div>
-                            
-                            <button class="btn btn-sm btn-outline-primary mt-2" id="testAwsBtn">
-                                <i class="fas fa-test"></i> 测试连接并加载音色
+                            <button class="btn btn-sm btn-outline-primary mt-2" id="loadAwsVoicesBtn">
+                                <i class="fas fa-sync-alt"></i> 加载音色
                                 <span class="loading-spinner" id="awsLoading"><i class="fas fa-spinner fa-spin"></i></span>
                             </button>
                         </div>
@@ -259,7 +253,6 @@
                             <input type="radio" name="ttsOption" value="microsoft" class="form-check-input">
                             Microsoft Azure TTS（免费额度）
                         </label>
-                        <input type="text" class="form-control api-key-input" placeholder="Azure API密钥（可选）" id="azureKey" style="display: none;">
                     </div>
                 </div>
 
@@ -285,7 +278,6 @@
                 </div>
                 
                 <div id="wordDisplayArea" style="display: none;">
-                    <!-- 其余内容保持不变 -->
                     <div class="word-display" id="currentWord"></div>
                     <div class="phonetic" id="currentPhonetic"></div>
                     
@@ -342,7 +334,7 @@
             </div>
             <div class="card-footer">
                 <div class="creator-info">
-                    <p><i class="fas fa-user-edit"></i> 创建者：<span class="creator-name">立小满<span class="version-badge">bilibili</span></span></p>
+                    <p><i class="fas fa-user-edit"></i> 创建者：<span class="creator-name">小满(自律版）<span class="version-badge">rednote</span></span></p>
                     <p><i class="fas fa-envelope"></i> 联系方式：<a href="mailto:xiaoman0517@yeah.net" class="contact-email">xiaoman0517@yeah.net</a></p>
                     <p class="custom-request">有定制需求的欢迎私信或来邮 ❤️</p>
                 </div>
@@ -350,248 +342,181 @@
         </div>
     </div>
 
-    <!-- 引入AWS SDK -->
-    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1325.0.min.js"></script>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <script>
-        // 全局变量
+        // 将此 URL 替换为你的 API Gateway URL
+        const API_GATEWAY_URL = 'https://n7svd3qjla.execute-api.us-east-1.amazonaws.com/dev';
+        const LAMBDA_VOICES_URL = `${API_GATEWAY_URL}/voices`; // 用于获取音色列表的端点
+        const LAMBDA_SYNTHESIZE_URL = `${API_GATEWAY_URL}/synthesize`; // 用于语音合成的端点
+
         let wordsData = [];
         let currentIndex = 0;
         let autoPlayInterval = null;
         let isAutoPlaying = false;
         let isAutoPlayingWithExample = false;
-        let polly = null;
         let availableVoices = [];
         const speechSynthesis = window.speechSynthesis;
-
-        // Amazon Polly 预设音色推荐
-        const RECOMMENDED_VOICES = {
-            'en-US': ['Joanna', 'Matthew', 'Salli', 'Kimberly', 'Kendra', 'Ivy'],
-            'fr-FR': ['Lea', 'Celine', 'Mathieu', 'Remi'],
-            'ja-JP': ['Mizuki', 'Takumi'],
-            'zh-CN': ['Zhiyu'],
-            'zh-TW': ['Zhiyu'],
-            'de-DE': ['Vicki', 'Hans'],
-            'es-ES': ['Conchita', 'Lucia', 'Enrique'],
-            'it-IT': ['Carla', 'Giorgio'],
-            'ko-KR': ['Seoyeon']
-        };
-
-        // 免费TTS API服务
-        const TTS_SERVICES = {
-            // Google TTS
-            google: async (text, lang) => {
-                try {
-                    const audio = new Audio();
-                    audio.src = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
-                    return new Promise((resolve) => {
-                        audio.onended = resolve;
-                        audio.onerror = resolve;
-                        audio.play().catch(resolve);
-                    });
-                } catch (error) {
-                    return fallbackTTS(text, lang);
-                }
-            },
-
-            // Amazon Polly TTS
-            amazon: async (text, lang, config = null) => {
-                try {
-                    if (!polly) {
-                        if (!config || !config.accessKeyId || !config.secretAccessKey) {
-                            throw new Error('AWS凭据未配置');
-                        }
-                        
-                        AWS.config.update({
-                            accessKeyId: config.accessKeyId,
-                            secretAccessKey: config.secretAccessKey,
-                            region: config.region || 'us-east-1'
-                        });
-                        
-                        polly = new AWS.Polly();
-                    }
-
-                    const voiceId = document.getElementById('voiceSelect').value;
-                    const useNeural = document.getElementById('useNeuralEngine').checked;
-                    
-                    if (!voiceId) {
-                        throw new Error('请选择音色');
-                    }
-
-                    const params = {
-                        OutputFormat: 'mp3',
-                        Text: text,
-                        VoiceId: voiceId,
-                        Engine: useNeural ? 'neural' : 'standard'
-                    };
-
-                    const data = await polly.synthesizeSpeech(params).promise();
-                    
-                    if (data.AudioStream) {
-                        const audioBlob = new Blob([data.AudioStream], { type: 'audio/mpeg' });
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        const audio = new Audio(audioUrl);
-                        
-                        return new Promise((resolve) => {
-                            audio.onended = resolve;
-                            audio.onerror = () => fallbackTTS(text, lang).then(resolve);
-                            audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
-                        });
-                    }
-                } catch (error) {
-                    console.warn('Amazon Polly失败:', error);
-                    return fallbackTTS(text, lang);
-                }
-            },
-
-            // Microsoft Azure TTS
-            microsoft: async (text, lang, apiKey = null) => {
-                try {
-                    const audio = new Audio();
-                    audio.src = `https://api.voicerss.org/?key=demo&hl=${lang}&src=${encodeURIComponent(text)}`;
-                    return new Promise((resolve) => {
-                        audio.onended = resolve;
-                        audio.onerror = () => fallbackTTS(text, lang).then(resolve);
-                        audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
-                    });
-                } catch (error) {
-                    return fallbackTTS(text, lang);
-                }
-            },
-
-            // 浏览器内置TTS
-            browser: (text, lang) => {
-                return new Promise((resolve) => {
-                    speechSynthesis.cancel();
-                    const utterance = new SpeechSynthesisUtterance(text);
-                    utterance.lang = lang;
-                    
-                    switch(lang) {
-                        case 'zh-CN':
-                        case 'zh-TW':
-                            utterance.rate = 0.9;
-                            utterance.pitch = 1.2;
-                            break;
-                        case 'ja-JP':
-                            utterance.rate = 0.85;
-                            utterance.pitch = 1.0;
-                            break;
-                        default:
-                            utterance.rate = 0.9;
-                            utterance.pitch = 1.1;
-                    }
-                    
-                    utterance.onend = resolve;
-                    utterance.onerror = resolve;
-                    speechSynthesis.speak(utterance);
-                });
-            }
-        };
 
         // 加载可用音色
         async function loadVoices() {
             const voiceSelect = document.getElementById('voiceSelect');
             const lang = document.getElementById('languageSelect').value;
             
+            voiceSelect.innerHTML = '<option value="">正在加载...</option>';
+            document.getElementById('awsLoading').style.display = 'inline-block';
+            document.getElementById('loadAwsVoicesBtn').disabled = true;
+
             try {
-                const data = await polly.describeVoices().promise();
+                const response = await fetch(LAMBDA_VOICES_URL, {
+                    method: 'POST', // 或 GET，取决于你后端的实现
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ languageCode: lang.replace('-', '_') }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch voices from API.');
+                }
+
+                const data = await response.json();
                 availableVoices = data.Voices;
+                
+                voiceSelect.innerHTML = '';
                 
                 // 过滤出当前语言的音色
                 const langVoices = availableVoices.filter(voice => 
                     voice.LanguageCode === lang.replace('_', '-')
                 );
-                
-                // 清空选择框
-                voiceSelect.innerHTML = '';
-                
-                // 添加推荐音色
-                const recommended = RECOMMENDED_VOICES[lang] || [];
-                if (recommended.length > 0) {
-                    const group = document.createElement('optgroup');
-                    group.label = '推荐音色';
-                    recommended.forEach(voiceId => {
-                        const voice = langVoices.find(v => v.Id === voiceId);
-                        if (voice) {
-                            const option = document.createElement('option');
-                            option.value = voice.Id;
-                            option.textContent = `${voice.Name} (${voice.Gender}) - ${voice.SupportedEngines.includes('neural') ? '神经' : '标准'}`;
-                            if (voice.Id === recommended[0]) {
-                                option.selected = true;
-                            }
-                            group.appendChild(option);
-                        }
-                    });
-                    voiceSelect.appendChild(group);
-                }
-                
-                // 添加其他音色
-                const otherVoices = langVoices.filter(voice => !recommended.includes(voice.Id));
-                if (otherVoices.length > 0) {
-                    const group = document.createElement('optgroup');
-                    group.label = '其他音色';
-                    otherVoices.forEach(voice => {
-                        const option = document.createElement('option');
-                        option.value = voice.Id;
-                        option.textContent = `${voice.Name} (${voice.Gender}) - ${voice.SupportedEngines.includes('neural') ? '神经' : '标准'}`;
-                        group.appendChild(option);
-                    });
-                    voiceSelect.appendChild(group);
-                }
-                
+
                 if (langVoices.length === 0) {
                     voiceSelect.innerHTML = '<option value="">未找到适合当前语言的音色</option>';
+                    return;
                 }
+
+                // 按引擎和名称排序
+                langVoices.sort((a, b) => {
+                    if (a.Engine === 'neural' && b.Engine !== 'neural') return -1;
+                    if (a.Engine !== 'neural' && b.Engine === 'neural') return 1;
+                    return a.Name.localeCompare(b.Name);
+                });
+
+                langVoices.forEach(voice => {
+                    const option = document.createElement('option');
+                    option.value = voice.Id;
+                    const engineLabel = voice.SupportedEngines.includes('neural') ? '神经' : '标准';
+                    option.textContent = `${voice.Name} (${voice.Gender}) - ${engineLabel}`;
+                    voiceSelect.appendChild(option);
+                });
+
+                voiceSelect.value = langVoices[0].Id;
                 
             } catch (error) {
                 console.error('加载音色失败:', error);
                 voiceSelect.innerHTML = '<option value="">加载音色失败</option>';
+            } finally {
+                document.getElementById('awsLoading').style.display = 'none';
+                document.getElementById('loadAwsVoicesBtn').disabled = false;
             }
         }
 
-        // 备用TTS方案
+        // 备用TTS方案（保持不变）
         function fallbackTTS(text, lang) {
-            const selectedService = document.querySelector('input[name="ttsOption"]:checked').value;
-            if (selectedService !== 'browser') {
-                return TTS_SERVICES.browser(text, lang);
-            }
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = lang;
+            speechSynthesis.speak(utterance);
             return Promise.resolve();
         }
 
-        // 获取当前选择的TTS服务
+        // 获取当前选择的TTS服务（保持不变）
         function getCurrentTTSService() {
             return document.querySelector('input[name="ttsOption"]:checked').value;
         }
 
-        // 获取AWS配置
-        function getAWSConfig() {
-            return {
-                accessKeyId: document.getElementById('awsAccessKey').value.trim(),
-                secretAccessKey: document.getElementById('awsSecretKey').value.trim(),
-                region: document.getElementById('awsRegion').value.trim() || 'us-east-1'
-            };
-        }
-
-        // 播放文本
+        // 播放文本（核心修改部分）
         async function playText(text, lang) {
             const service = getCurrentTTSService();
             
             if (service === 'amazon') {
-                const awsConfig = getAWSConfig();
-                return TTS_SERVICES[service](text, lang, awsConfig);
+                const voiceId = document.getElementById('voiceSelect').value;
+                if (!voiceId) {
+                    alert('请先加载并选择一个 Amazon Polly 音色。');
+                    return Promise.reject('No voice selected');
+                }
+
+                document.getElementById('awsLoading').style.display = 'inline-block';
+
+                try {
+                    const response = await fetch(LAMBDA_SYNTHESIZE_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: text,
+                            voiceId: voiceId,
+                            engine: document.getElementById('useNeuralEngine').checked ? 'neural' : 'standard'
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'API request failed');
+                    }
+
+                    const audioBlob = await response.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    
+                    return new Promise((resolve) => {
+                        audio.onended = resolve;
+                        audio.onerror = () => {
+                            console.error('音频播放失败，使用备用方案。');
+                            fallbackTTS(text, lang).then(resolve);
+                        };
+                        audio.play().catch(() => {
+                            console.error('音频播放失败，使用备用方案。');
+                            fallbackTTS(text, lang).then(resolve);
+                        });
+                    });
+
+                } catch (error) {
+                    console.error('调用后端API失败:', error);
+                    alert(`语音合成失败: ${error.message}。将使用浏览器内置语音作为备用。`);
+                    return fallbackTTS(text, lang);
+                } finally {
+                    document.getElementById('awsLoading').style.display = 'none';
+                }
+            } else if (service === 'google') {
+                // Google TTS
+                const audio = new Audio();
+                audio.src = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+                return new Promise((resolve) => {
+                    audio.onended = resolve;
+                    audio.onerror = () => fallbackTTS(text, lang).then(resolve);
+                    audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
+                });
             } else if (service === 'microsoft') {
-                const apiKey = document.getElementById('azureKey').value;
-                return TTS_SERVICES[service](text, lang, apiKey);
+                // Microsoft Azure TTS
+                const audio = new Audio();
+                // 假设后端提供一个Azure TTS代理服务
+                // const azureApiKey = "YOUR_AZURE_API_KEY"; // 如果需要，你可以将密钥也通过后端代理
+                // audio.src = `https://your-azure-proxy-url.com/tts?text=${encodeURIComponent(text)}&lang=${lang}`;
+                // 由于Azure密钥也需要保密，建议使用后端代理
+                audio.src = `https://api.voicerss.org/?key=demo&hl=${lang}&src=${encodeURIComponent(text)}`;
+                return new Promise((resolve) => {
+                    audio.onended = resolve;
+                    audio.onerror = () => fallbackTTS(text, lang).then(resolve);
+                    audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
+                });
             } else {
-                return TTS_SERVICES[service](text, lang);
+                return fallbackTTS(text, lang);
             }
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            // 获取DOM元素
             const loadFileBtn = document.getElementById('loadFileBtn');
             const fileInput = document.getElementById('fileInput');
             const wordDisplayArea = document.getElementById('wordDisplayArea');
@@ -611,59 +536,27 @@
             const progressBar = document.getElementById('progressBar');
             const progressText = document.getElementById('progressText');
             const intervalInput = document.getElementById('intervalInput');
-            const testAwsBtn = document.getElementById('testAwsBtn');
-            const awsLoading = document.getElementById('awsLoading');
+            const loadAwsVoicesBtn = document.getElementById('loadAwsVoicesBtn');
             const languageSelect = document.getElementById('languageSelect');
+            const amazonConfigDiv = document.querySelector('.amazon-config');
 
             // TTS选项切换
             document.querySelectorAll('input[name="ttsOption"]').forEach(radio => {
                 radio.addEventListener('change', function() {
-                    document.querySelector('.amazon-config').style.display = 
-                        this.value === 'amazon' ? 'block' : 'none';
-                    document.getElementById('azureKey').style.display = 
-                        this.value === 'microsoft' ? 'block' : 'none';
+                    amazonConfigDiv.style.display = this.value === 'amazon' ? 'block' : 'none';
+                    // 隐藏其他配置
                 });
             });
 
             // 语言切换时重新加载音色
             languageSelect.addEventListener('change', function() {
-                if (polly && getCurrentTTSService() === 'amazon') {
+                if (getCurrentTTSService() === 'amazon') {
                     loadVoices();
                 }
             });
 
-            // 测试AWS连接并加载音色
-            testAwsBtn.addEventListener('click', async function() {
-                const awsConfig = getAWSConfig();
-                if (!awsConfig.accessKeyId || !awsConfig.secretAccessKey) {
-                    alert('请填写Access Key ID和Secret Access Key');
-                    return;
-                }
-
-                awsLoading.style.display = 'inline-block';
-                testAwsBtn.disabled = true;
-
-                try {
-                    // 配置AWS
-                    AWS.config.update({
-                        accessKeyId: awsConfig.accessKeyId,
-                        secretAccessKey: awsConfig.secretAccessKey,
-                        region: awsConfig.region
-                    });
-
-                    polly = new AWS.Polly();
-                    
-                    // 测试连接并加载音色
-                    await loadVoices();
-                    alert('✅ AWS连接成功！音色已加载');
-                } catch (error) {
-                    console.error('AWS连接测试失败:', error);
-                    alert('❌ AWS连接测试失败，请检查凭据和区域设置');
-                } finally {
-                    awsLoading.style.display = 'none';
-                    testAwsBtn.disabled = false;
-                }
-            });
+            // 加载AWS音色按钮事件
+            loadAwsVoicesBtn.addEventListener('click', loadVoices);
 
             // 加载Excel文件
             loadFileBtn.addEventListener('click', function() {
@@ -772,128 +665,101 @@
                 stopAutoPlay();
             });
 
-            // 仅显示单词（隐藏释义，但显示例句）
+            // 仅显示单词（隐藏释义）
             function displayWordOnly() {
                 const currentWord = wordsData[currentIndex];
                 currentWordElement.textContent = currentWord.word || '';
                 currentPhoneticElement.textContent = currentWord.phonetic || '';
                 
-                currentDefinitionElement.className = 'definition hidden-content';
+                currentDefinitionElement.classList.add('hidden-content');
+                currentDefinitionElement.classList.remove('visible-content');
                 
-                if (currentWord.example && currentWord.example.trim() !== '') {
-                    exampleSentenceElement.textContent = currentWord.example;
-                    exampleTranslationElement.textContent = '';
-                    exampleSentenceArea.className = 'example-sentence visible-content';
-                } else {
-                    exampleSentenceArea.className = 'example-sentence hidden-content';
-                }
+                exampleSentenceArea.classList.add('hidden-content');
+                exampleSentenceArea.classList.remove('visible-content');
             }
 
-            // 显示完整内容
-            function displayFullContent() {
+            // 显示所有内容（单词、释义、例句）
+            function displayAll() {
                 const currentWord = wordsData[currentIndex];
+                currentWordElement.textContent = currentWord.word || '';
+                currentPhoneticElement.textContent = currentWord.phonetic || '';
                 currentDefinitionElement.textContent = currentWord.definition || '';
+                exampleSentenceElement.textContent = currentWord.example || '';
+                exampleTranslationElement.textContent = currentWord.exampleTranslation || '';
                 
-                if (currentWord.example && currentWord.example.trim() !== '') {
-                    exampleSentenceElement.textContent = currentWord.example;
-                    exampleTranslationElement.textContent = currentWord.exampleTranslation || '';
-                    exampleSentenceArea.className = 'example-sentence visible-content';
+                currentDefinitionElement.classList.add('visible-content');
+                currentDefinitionElement.classList.remove('hidden-content');
+
+                if (currentWord.example) {
+                    exampleSentenceArea.classList.add('visible-content');
+                    exampleSentenceArea.classList.remove('hidden-content');
                 } else {
-                    exampleSentenceArea.className = 'example-sentence hidden-content';
+                    exampleSentenceArea.classList.add('hidden-content');
+                    exampleSentenceArea.classList.remove('visible-content');
                 }
-                
-                currentDefinitionElement.className = 'definition visible-content';
             }
 
-            // 开始自动播放
-            function startAutoPlay() {
+            // 播放当前单词
+            async function playCurrentWord() {
+                const currentWord = wordsData[currentIndex];
+                if (!currentWord || !currentWord.word) return;
+
+                const lang = document.getElementById('languageSelect').value;
+
+                await playText(currentWord.word, lang);
+
+                // 播放完毕后显示内容
+                setTimeout(() => {
+                    displayAll();
+                }, 1000); // 1秒后显示，模拟听写间隔
+            }
+
+            // 自动播放核心函数
+            async function startAutoPlay() {
+                if (wordsData.length === 0) return;
+
                 isAutoPlaying = true;
-                autoPlayBtn.innerHTML = isAutoPlayingWithExample ? 
-                    '<i class="fas fa-pause"></i> 停止自动（例句）' : 
-                    '<i class="fas fa-pause"></i> 停止自动';
-                autoPlayWithExampleBtn.innerHTML = isAutoPlayingWithExample ? 
-                    '<i class="fas fa-pause"></i> 停止自动（例句）' : 
-                    '<i class="fas fa-sync"></i> 自动播放（带例句）';
-                playCurrentWord();
+                const intervalTime = parseFloat(intervalInput.value) * 1000;
+                
+                // 立即播放第一个单词
+                await playCurrentWord();
+                
+                autoPlayInterval = setInterval(async () => {
+                    if (isAutoPlayingWithExample) {
+                        const currentWord = wordsData[currentIndex];
+                        if (currentWord.example) {
+                            await playText(currentWord.example, document.getElementById('languageSelect').value);
+                        }
+                    }
+
+                    // 切换到下一个单词
+                    currentIndex = (currentIndex + 1) % wordsData.length;
+                    updateProgress();
+                    displayWordOnly();
+                    await playCurrentWord();
+                    
+                }, intervalTime + 4000); // 增加额外延迟以确保例句播放完毕
             }
 
             // 停止自动播放
             function stopAutoPlay() {
                 isAutoPlaying = false;
                 isAutoPlayingWithExample = false;
-                if (autoPlayInterval) {
-                    clearTimeout(autoPlayInterval);
-                    autoPlayInterval = null;
-                }
-                autoPlayBtn.innerHTML = '<i class="fas fa-sync-alt"></i> 自动播放';
-                autoPlayWithExampleBtn.innerHTML = '<i class="fas fa-sync"></i> 自动播放（带例句）';
+                clearInterval(autoPlayInterval);
                 speechSynthesis.cancel();
-            }
-
-            // 播放当前单词
-            async function playCurrentWord() {
-                if (wordsData.length === 0) return;
-                
-                const currentWord = wordsData[currentIndex].word;
-                if (!currentWord) return;
-                
-                speechSynthesis.cancel();
-                const lang = document.getElementById('languageSelect').value;
-                
-                // 在播放前先显示例句
-                if (isAutoPlayingWithExample) {
-                    const currentWordData = wordsData[currentIndex];
-                    if (currentWordData.example && currentWordData.example.trim() !== '') {
-                        exampleSentenceElement.textContent = currentWordData.example;
-                        exampleTranslationElement.textContent = '';
-                        exampleSentenceArea.className = 'example-sentence visible-content';
-                    }
-                }
-                
-                // 播放单词
-                await playText(currentWord, lang);
-                
-                if (isAutoPlayingWithExample && wordsData[currentIndex].example) {
-                    // 播放例句
-                    await playText(wordsData[currentIndex].example, lang);
-                    
-                    // 例句播放完成后显示完整内容
-                    displayFullContent();
-                    scheduleNextWord();
-                } else {
-                    // 普通自动播放模式
-                    displayFullContent();
-                    scheduleNextWord();
-                }
-            }
-
-            // 安排下一个单词
-            function scheduleNextWord() {
-                if ((isAutoPlaying || isAutoPlayingWithExample) && !speechSynthesis.speaking) {
-                    const interval = parseInt(intervalInput.value) * 1000;
-                    
-                    autoPlayInterval = setTimeout(function() {
-                        currentIndex = (currentIndex + 1) % wordsData.length;
-                        displayWordOnly();
-                        updateProgress();
-                        
-                        if (currentIndex === 0) {
-                            stopAutoPlay();
-                        } else {
-                            playCurrentWord();
-                        }
-                    }, interval);
-                }
             }
 
             // 更新进度条
             function updateProgress() {
-                if (wordsData.length === 0) return;
-                
-                const progress = ((currentIndex + 1) / wordsData.length) * 100;
+                const total = wordsData.length;
+                const current = currentIndex + 1;
+                const progress = (current / total) * 100;
                 progressBar.style.width = `${progress}%`;
-                progressText.textContent = `${currentIndex + 1}/${wordsData.length}`;
+                progressText.textContent = `${current}/${total}`;
             }
+
+            // 默认隐藏 AWS 配置区域
+            amazonConfigDiv.style.display = 'none';
         });
     </script>
 </body>
