@@ -212,6 +212,7 @@
                 <h3 class="text-center"><i class="fas fa-language"></i> 跨语言智能听写训练系统</h3>
             </div>
             <div class="card-body">
+                <!-- TTS设置区域 - 简化版 -->
                 <div class="tts-settings">
                     <h5><i class="fas fa-cog"></i> 语音合成设置</h5>
                     <div class="tts-option">
@@ -229,33 +230,30 @@
                     <div class="tts-option">
                         <label class="form-check-label">
                             <input type="radio" name="ttsOption" value="amazon" class="form-check-input">
-                            Amazon Polly（AI语音，已配置后端）
+                            Amazon Polly（AI语音，无需配置）
                         </label>
-                        <div class="amazon-config">
+                        <div class="amazon-config" style="display: none;">
                             <div class="voice-selection">
                                 <label>选择音色：</label>
                                 <select class="form-control" id="voiceSelect">
-                                    <option value="">请先加载音色...</option>
+                                    <option value="default">默认音色</option>
+                                    <option value="Joanna">Joanna (英语，女声)</option>
+                                    <option value="Matthew">Matthew (英语，男声)</option>
+                                    <option value="Zhiyu">Zhiyu (中文，女声)</option>
+                                    <option value="Lea">Lea (法语，女声)</option>
+                                    <option value="Mizuki">Mizuki (日语，女声)</option>
+                                    <!-- 更多音色选项 -->
                                 </select>
                                 <div class="form-check mt-2">
                                     <input type="checkbox" class="form-check-input" id="useNeuralEngine" checked>
                                     <label class="form-check-label" for="useNeuralEngine">使用神经引擎（更自然）</label>
                                 </div>
                             </div>
-                            <button class="btn btn-sm btn-outline-primary mt-2" id="loadAwsVoicesBtn">
-                                <i class="fas fa-sync-alt"></i> 加载音色
-                                <span class="loading-spinner" id="awsLoading"><i class="fas fa-spinner fa-spin"></i></span>
-                            </button>
                         </div>
-                    </div>
-                    <div class="tts-option">
-                        <label class="form-check-label">
-                            <input type="radio" name="ttsOption" value="microsoft" class="form-check-input">
-                            Microsoft Azure TTS（免费额度）
-                        </label>
                     </div>
                 </div>
 
+                <!-- 其余界面保持不变 -->
                 <div class="text-center mb-3">
                     <select id="languageSelect" class="form-select" style="width: auto; display: inline-block;">
                         <option value="en-US">English (英语)</option>
@@ -334,7 +332,7 @@
             </div>
             <div class="card-footer">
                 <div class="creator-info">
-                    <p><i class="fas fa-user-edit"></i> 创建者：<span class="creator-name">小满(自律版）<span class="version-badge">rednote</span></span></p>
+                    <p><i class="fas fa-user-edit"></i> 创建者：<span class="creator-name">立小满<span class="version-badge">bilibili</span></span></p>
                     <p><i class="fas fa-envelope"></i> 联系方式：<a href="mailto:xiaoman0517@yeah.net" class="contact-email">xiaoman0517@yeah.net</a></p>
                     <p class="custom-request">有定制需求的欢迎私信或来邮 ❤️</p>
                 </div>
@@ -346,177 +344,147 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <script>
-        // 将此 URL 替换为你的 API Gateway URL
-        const API_GATEWAY_URL = 'https://n7svd3qjla.execute-api.us-east-1.amazonaws.com/dev';
-        const LAMBDA_VOICES_URL = `${API_GATEWAY_URL}/voices`; // 用于获取音色列表的端点
-        const LAMBDA_SYNTHESIZE_URL = `${API_GATEWAY_URL}/synthesize`; // 用于语音合成的端点
-
+        // 全局变量
         let wordsData = [];
         let currentIndex = 0;
         let autoPlayInterval = null;
         let isAutoPlaying = false;
         let isAutoPlayingWithExample = false;
-        let availableVoices = [];
         const speechSynthesis = window.speechSynthesis;
+        
+        // API Gateway端点URL - 需要替换为您的实际端点
+        const API_GATEWAY_ENDPOINT = 'https://n82sh0rizf.execute-api.us-east-1.amazonaws.com/prod/tts';
 
-        // 加载可用音色
-        async function loadVoices() {
-            const voiceSelect = document.getElementById('voiceSelect');
-            const lang = document.getElementById('languageSelect').value;
-            
-            voiceSelect.innerHTML = '<option value="">正在加载...</option>';
-            document.getElementById('awsLoading').style.display = 'inline-block';
-            document.getElementById('loadAwsVoicesBtn').disabled = true;
-
-            try {
-                const response = await fetch(LAMBDA_VOICES_URL, {
-                    method: 'POST', // 或 GET，取决于你后端的实现
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ languageCode: lang.replace('-', '_') }),
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch voices from API.');
-                }
-
-                const data = await response.json();
-                availableVoices = data.Voices;
-                
-                voiceSelect.innerHTML = '';
-                
-                // 过滤出当前语言的音色
-                const langVoices = availableVoices.filter(voice => 
-                    voice.LanguageCode === lang.replace('_', '-')
-                );
-
-                if (langVoices.length === 0) {
-                    voiceSelect.innerHTML = '<option value="">未找到适合当前语言的音色</option>';
-                    return;
-                }
-
-                // 按引擎和名称排序
-                langVoices.sort((a, b) => {
-                    if (a.Engine === 'neural' && b.Engine !== 'neural') return -1;
-                    if (a.Engine !== 'neural' && b.Engine === 'neural') return 1;
-                    return a.Name.localeCompare(b.Name);
-                });
-
-                langVoices.forEach(voice => {
-                    const option = document.createElement('option');
-                    option.value = voice.Id;
-                    const engineLabel = voice.SupportedEngines.includes('neural') ? '神经' : '标准';
-                    option.textContent = `${voice.Name} (${voice.Gender}) - ${engineLabel}`;
-                    voiceSelect.appendChild(option);
-                });
-
-                voiceSelect.value = langVoices[0].Id;
-                
-            } catch (error) {
-                console.error('加载音色失败:', error);
-                voiceSelect.innerHTML = '<option value="">加载音色失败</option>';
-            } finally {
-                document.getElementById('awsLoading').style.display = 'none';
-                document.getElementById('loadAwsVoicesBtn').disabled = false;
-            }
-        }
-
-        // 备用TTS方案（保持不变）
-        function fallbackTTS(text, lang) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = lang;
-            speechSynthesis.speak(utterance);
-            return Promise.resolve();
-        }
-
-        // 获取当前选择的TTS服务（保持不变）
-        function getCurrentTTSService() {
-            return document.querySelector('input[name="ttsOption"]:checked').value;
-        }
-
-        // 播放文本（核心修改部分）
-        async function playText(text, lang) {
-            const service = getCurrentTTSService();
-            
-            if (service === 'amazon') {
-                const voiceId = document.getElementById('voiceSelect').value;
-                if (!voiceId) {
-                    alert('请先加载并选择一个 Amazon Polly 音色。');
-                    return Promise.reject('No voice selected');
-                }
-
-                document.getElementById('awsLoading').style.display = 'inline-block';
-
+        // 免费TTS API服务
+        const TTS_SERVICES = {
+            // Google TTS
+            google: async (text, lang) => {
                 try {
-                    const response = await fetch(LAMBDA_SYNTHESIZE_URL, {
+                    const audio = new Audio();
+                    audio.src = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+                    return new Promise((resolve) => {
+                        audio.onended = resolve;
+                        audio.onerror = resolve;
+                        audio.play().catch(resolve);
+                    });
+                } catch (error) {
+                    return fallbackTTS(text, lang);
+                }
+            },
+
+            // Amazon Polly TTS - 通过API Gateway调用
+            amazon: async (text, lang) => {
+                try {
+                    const voiceId = document.getElementById('voiceSelect').value;
+                    const useNeural = document.getElementById('useNeuralEngine').checked;
+                    
+                    // 调用API Gateway
+                    const response = await fetch(API_GATEWAY_ENDPOINT, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
                             text: text,
-                            voiceId: voiceId,
-                            engine: document.getElementById('useNeuralEngine').checked ? 'neural' : 'standard'
-                        }),
+                            language: lang,
+                            voiceId: voiceId === 'default' ? null : voiceId,
+                            engine: useNeural ? 'neural' : 'standard'
+                        })
                     });
-
+                    
                     if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || 'API request failed');
+                        throw new Error('TTS请求失败');
                     }
-
-                    const audioBlob = await response.blob();
+                    
+                    const data = await response.json();
+                    
+                    // 解码Base64音频数据
+                    const audioBlob = base64ToBlob(data.audio, data.contentType || 'audio/mpeg');
                     const audioUrl = URL.createObjectURL(audioBlob);
                     const audio = new Audio(audioUrl);
                     
                     return new Promise((resolve) => {
                         audio.onended = resolve;
-                        audio.onerror = () => {
-                            console.error('音频播放失败，使用备用方案。');
-                            fallbackTTS(text, lang).then(resolve);
-                        };
-                        audio.play().catch(() => {
-                            console.error('音频播放失败，使用备用方案。');
-                            fallbackTTS(text, lang).then(resolve);
-                        });
+                        audio.onerror = () => fallbackTTS(text, lang).then(resolve);
+                        audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
                     });
-
                 } catch (error) {
-                    console.error('调用后端API失败:', error);
-                    alert(`语音合成失败: ${error.message}。将使用浏览器内置语音作为备用。`);
+                    console.warn('Amazon Polly API调用失败:', error);
                     return fallbackTTS(text, lang);
-                } finally {
-                    document.getElementById('awsLoading').style.display = 'none';
                 }
-            } else if (service === 'google') {
-                // Google TTS
-                const audio = new Audio();
-                audio.src = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(text)}`;
+            },
+
+            // 浏览器内置TTS
+            browser: (text, lang) => {
                 return new Promise((resolve) => {
-                    audio.onended = resolve;
-                    audio.onerror = () => fallbackTTS(text, lang).then(resolve);
-                    audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
+                    speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = lang;
+                    
+                    switch(lang) {
+                        case 'zh-CN':
+                        case 'zh-TW':
+                            utterance.rate = 0.9;
+                            utterance.pitch = 1.2;
+                            break;
+                        case 'ja-JP':
+                            utterance.rate = 0.85;
+                            utterance.pitch = 1.0;
+                            break;
+                        default:
+                            utterance.rate = 0.9;
+                            utterance.pitch = 1.1;
+                    }
+                    
+                    utterance.onend = resolve;
+                    utterance.onerror = resolve;
+                    speechSynthesis.speak(utterance);
                 });
-            } else if (service === 'microsoft') {
-                // Microsoft Azure TTS
-                const audio = new Audio();
-                // 假设后端提供一个Azure TTS代理服务
-                // const azureApiKey = "YOUR_AZURE_API_KEY"; // 如果需要，你可以将密钥也通过后端代理
-                // audio.src = `https://your-azure-proxy-url.com/tts?text=${encodeURIComponent(text)}&lang=${lang}`;
-                // 由于Azure密钥也需要保密，建议使用后端代理
-                audio.src = `https://api.voicerss.org/?key=demo&hl=${lang}&src=${encodeURIComponent(text)}`;
-                return new Promise((resolve) => {
-                    audio.onended = resolve;
-                    audio.onerror = () => fallbackTTS(text, lang).then(resolve);
-                    audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
-                });
-            } else {
-                return fallbackTTS(text, lang);
             }
+        };
+
+        // Base64转Blob
+        function base64ToBlob(base64, contentType = '', sliceSize = 512) {
+            const byteCharacters = atob(base64);
+            const byteArrays = [];
+
+            for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+                const slice = byteCharacters.slice(offset, offset + sliceSize);
+
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+
+                const byteArray = new Uint8Array(byteNumbers);
+                byteArrays.push(byteArray);
+            }
+
+            return new Blob(byteArrays, { type: contentType });
+        }
+
+        // 备用TTS方案
+        function fallbackTTS(text, lang) {
+            const selectedService = document.querySelector('input[name="ttsOption"]:checked').value;
+            if (selectedService !== 'browser') {
+                return TTS_SERVICES.browser(text, lang);
+            }
+            return Promise.resolve();
+        }
+
+        // 获取当前选择的TTS服务
+        function getCurrentTTSService() {
+            return document.querySelector('input[name="ttsOption"]:checked').value;
+        }
+
+        // 播放文本
+        async function playText(text, lang) {
+            const service = getCurrentTTSService();
+            return TTS_SERVICES[service](text, lang);
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // 获取DOM元素
             const loadFileBtn = document.getElementById('loadFileBtn');
             const fileInput = document.getElementById('fileInput');
             const wordDisplayArea = document.getElementById('wordDisplayArea');
@@ -536,27 +504,15 @@
             const progressBar = document.getElementById('progressBar');
             const progressText = document.getElementById('progressText');
             const intervalInput = document.getElementById('intervalInput');
-            const loadAwsVoicesBtn = document.getElementById('loadAwsVoicesBtn');
             const languageSelect = document.getElementById('languageSelect');
-            const amazonConfigDiv = document.querySelector('.amazon-config');
 
             // TTS选项切换
             document.querySelectorAll('input[name="ttsOption"]').forEach(radio => {
                 radio.addEventListener('change', function() {
-                    amazonConfigDiv.style.display = this.value === 'amazon' ? 'block' : 'none';
-                    // 隐藏其他配置
+                    document.querySelector('.amazon-config').style.display = 
+                        this.value === 'amazon' ? 'block' : 'none';
                 });
             });
-
-            // 语言切换时重新加载音色
-            languageSelect.addEventListener('change', function() {
-                if (getCurrentTTSService() === 'amazon') {
-                    loadVoices();
-                }
-            });
-
-            // 加载AWS音色按钮事件
-            loadAwsVoicesBtn.addEventListener('click', loadVoices);
 
             // 加载Excel文件
             loadFileBtn.addEventListener('click', function() {
@@ -599,7 +555,7 @@
                 reader.readAsArrayBuffer(file);
             });
             
-            // 播放例句
+             // 播放例句
             playExampleBtn.addEventListener('click', function() {
                 const currentWord = wordsData[currentIndex];
                 if (!currentWord || !currentWord.example) return;
