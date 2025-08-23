@@ -256,15 +256,9 @@
                                 <i class="fas fa-sync-alt"></i> 加载音色
                                 <span class="loading-spinner" id="awsLoading"><i class="fas fa-spinner fa-spin"></i></span>
                             </button>
-                            <!-- 调试音频下载按钮已移除 -->
                         </div>
                     </div>
-                    <div class="tts-option">
-                        <label class="form-check-label">
-                            <input type="radio" name="ttsOption" value="microsoft" class="form-check-input">
-                            Microsoft Azure TTS（免费额度）
-                        </label>
-                    </div>
+                    <!-- Microsoft Azure TTS 相关的部分已移除 -->
                 </div>
 
                 <div class="text-center mb-3">
@@ -630,7 +624,7 @@
             utterance.lang = lang;
             speechSynthesis.speak(utterance);
             return new Promise(resolve => {
-                utterance.onend = resolve;
+                utterance.onended = resolve;
                 utterance.onerror = () => {
                     console.error("Fallback TTS error.");
                     resolve();
@@ -736,15 +730,7 @@
                     audio.onerror = () => fallbackTTS(text, lang).then(resolve);
                     audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
                 });
-            } else if (service === 'microsoft') {
-                const audio = new Audio();
-                audio.src = `https://api.voicerss.org/?key=demo&hl=${correctedLang}&src=${encodeURIComponent(text)}`; // Note: voicerss.org 'demo' key has limitations
-                return new Promise((resolve) => {
-                    audio.onended = resolve;
-                    audio.onerror = () => fallbackTTS(text, lang).then(resolve);
-                    audio.play().catch(() => fallbackTTS(text, lang).then(resolve));
-                });
-            } else {
+            } else { // Fallback to browser TTS if service is not 'amazon' or 'google' (and previously 'microsoft')
                 return fallbackTTS(text, lang);
             }
         }
