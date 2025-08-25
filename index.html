@@ -226,6 +226,12 @@
             background-color: #c82333;
             border-color: #bd2130;
         }
+        .download-info-text {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-left: 10px;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
@@ -254,15 +260,15 @@
                                 <select class="form-control" id="voiceSelect">
                                     <option value="">请先加载音色...</option>
                                 </select>
+                                <span class="loading-spinner" id="awsLoading" style="margin-left: 10px;">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                </span>
                                 <div class="form-check mt-2">
                                     <input type="checkbox" class="form-check-input" id="useNeuralEngine" checked>
                                     <label class="form-check-label" id="useNeuralEngineLabel">使用神经引擎（更自然）</label>
                                 </div>
                             </div>
-                            <button class="btn btn-sm btn-outline-primary mt-2" id="loadAwsVoicesBtn">
-                                <i class="fas fa-sync-alt"></i> <span id="loadVoicesBtnText">加载音色</span>
-                                <span class="loading-spinner" id="awsLoading"><i class="fas fa-spinner fa-spin"></i></span>
-                            </button>
+                            <!-- Removed loadAwsVoicesBtn -->
                         </div>
                     </div>
                 </div>
@@ -272,12 +278,17 @@
                     <select id="languageSelect" class="form-select" style="width: auto; display: inline-block;">
                         <!-- Options will be dynamically loaded here by populatePollyLanguageSelector -->
                     </select>
+                    <!-- Removed pollyLangInfoText based on the revert request -->
                 </div>
 
                 <div class="text-center mb-4">
-                    <button class="btn btn-primary" id="loadFileBtn">
+                    <button class="btn btn-primary me-2" id="loadFileBtn">
                         <i class="fas fa-file-excel"></i> <span id="loadFileBtnText">加载Excel单词表</span>
                     </button>
+                    <button class="btn btn-outline-primary" id="downloadFileBtn">
+                        <i class="fas fa-download"></i> <span id="downloadFileBtnText">下载单词表</span>
+                    </button>
+                    <span id="downloadInfoText" class="download-info-text">（未加载文件时下载示例单词表）</span>
                     <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
                     <!-- New reminder text -->
                     <p id="excelReminderText" class="text-muted mt-2" style="font-size: 0.9rem;"></p>
@@ -383,7 +394,7 @@
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
         const intervalInput = document.getElementById('intervalInput');
-        const loadAwsVoicesBtn = document.getElementById('loadAwsVoicesBtn');
+        // Removed loadAwsVoicesBtn reference
         const languageSelect = document.getElementById('languageSelect'); // Polly spoken language selector
         const amazonConfigDiv = document.querySelector('.amazon-config'); // This div now contains all relevant Amazon config
         const voiceSelect = document.getElementById('voiceSelect');
@@ -392,6 +403,25 @@
         const uiLanguageSelect = document.getElementById('uiLanguageSelect');
         const selectVoiceLabel = document.getElementById('selectVoiceLabel');
         const excelReminderText = document.getElementById('excelReminderText'); // New DOM element for Excel reminder
+        // New DOM element for download button
+        const downloadFileBtn = document.getElementById('downloadFileBtn');
+        const downloadInfoText = document.getElementById('downloadInfoText'); // New DOM element for download info
+        const awsLoading = document.getElementById('awsLoading'); // Added reference for the moved spinner
+
+
+        // Example word data for download when no file is loaded
+        const exampleWordsData = [
+            { word: 'Hello', phonetic: '/həˈloʊ/', definition: '用于见面或问候某人时的招呼语', example: 'Hello, how are you today?', exampleTranslation: '你好，你今天怎么样？' },
+            { word: 'World', phonetic: '/wɜːrld/', definition: '地球，连同其所有国家和民族', example: 'The world is a beautiful place.', exampleTranslation: '世界是一个美丽的地方。' },
+            { word: 'Learn', phonetic: '/lɜːrn/', definition: '通过学习、实践、被教导或经历某事来获取知识或技能', example: 'I want to learn a new language.', exampleTranslation: '我想学习一门新语言。' },
+            { word: 'Science', phonetic: '/ˈsaɪəns/', definition: '通过观察和实验，系统研究物理和自然世界结构和行为的智力及实践活动', example: 'Science helps us understand the universe.', exampleTranslation: '科学帮助我们理解宇宙。' },
+            { word: 'Computer', phonetic: '/kəmˈpjuːtər/', definition: '一种用于根据可变程序中的指令，通常以二进制形式存储和处理数据的电子设备', example: 'My computer is very fast.', exampleTranslation: '我的电脑速度很快。' },
+            { word: 'Knowledge', phonetic: '/ˈɒlɪdʒ/', definition: '一个人通过经验或教育获得的知识、信息和技能；对某个主题的理论或实践理解', example: 'Knowledge is power.', exampleTranslation: '知识就是力量。' },
+            { word: 'Success', phonetic: '/səkˈses/', definition: '实现目标或目的', example: 'Hard work is the key to success.', exampleTranslation: '努力工作是成功的关键。' },
+            { word: 'Challenge', phonetic: '/ˈtʃælɪndʒ/', definition: '呼吁某人参与竞争性情境或努力做某事', example: 'Facing new challenges helps us grow.', exampleTranslation: '面对新的挑战有助于我们成长。' }, // Fixed typo: TranslatedExample -> exampleTranslation
+            { word: 'Explore', phonetic: '/ɪkˈsplɔːr/', definition: '旅行或穿过（不熟悉的国家或地区）以了解或熟悉它', example: 'Let\'s explore new possibilities.', exampleTranslation: '让我们探索新的可能性。' },
+            { word: 'Improve', phonetic: '/ɪmˈprūv/', definition: '使或变得更好', example: 'We always strive to improve our skills.', exampleTranslation: '我们总是在努力提升我们的技能。' },
+        ];
 
 
         // 语言代码到友好名称的映射 (主要用于 Polly spoken languages 的显示)
@@ -445,8 +475,10 @@
                 amazonTtsLabel: 'Amazon Polly（AI语音，已配置后端）',
                 selectVoiceLabel: '选择音色：',
                 useNeuralEngineLabel: '使用神经引擎（更自然）',
-                loadVoicesBtnText: '加载音色',
+                // loadVoicesBtnText: '加载音色', // Removed as button is gone
                 loadFileBtnText: '加载Excel单词表',
+                downloadFileBtnText: '下载单词表', // New translation key
+                downloadInfoText: '（未加载文件时下载示例单词表）', // New translation key for download info
                 excelReminder: '请确保表格按照单词、音标、释义、例句和例句翻译这五列的顺序进行组织。',
                 exampleSentenceTitle: '例句:',
                 readExampleBtnText: '朗读例句',
@@ -460,6 +492,7 @@
                 creatorNameContent: '小满(自律版）', // New key for actual name
                 contactLabel: '联系方式：', // New key
                 customRequestText: 'Amazon Polly AI语音生成的免费额度有限，接受捐赠用于维护此网页长期正常运行，好心人可私信或来邮申请加本人微信或提供收款码，如有定制需求也欢迎私信或来邮,非常感谢！ ❤️',
+                pollyLangInfo: '', // Removed content for this key
                 // Auto Play Button States
                 autoPlayWordOnlyActive: '<i class="fas fa-pause"></i> 正在自动播放单词',
                 autoPlayWordAndExampleActive: '<i class="fas fa-pause"></i> 正在自动播放单词和例句',
@@ -482,7 +515,9 @@
                 msgSelectLanguage: '选择语言',
                 msgLoadFailed: '加载失败',
                 msgSelectVoice: '选择音色...',
-                msgNoVoicesForLang: '未找到适合当前语言的音色'
+                msgNoVoicesForLang: '未找到适合当前语言的音色',
+                msgNoDataToDownload: '没有可下载的单词数据。请先加载一个单词表。',
+                msgNoDownloadSupport: '您的浏览器不支持文件下载。请尝试使用最新版浏览器。'
             },
             'en-US': {
                 htmlTitle: 'Multilingual Smart Word Learning & Dictation Assistant',
@@ -491,8 +526,10 @@
                 amazonTtsLabel: 'Amazon Polly (AI Voice, Backend Configured)',
                 selectVoiceLabel: 'Select Voice:',
                 useNeuralEngineLabel: 'Use Neural Engine (More Natural)',
-                loadVoicesBtnText: 'Load Voices',
+                // loadVoicesBtnText: 'Load Voices', // Removed as button is gone
                 loadFileBtnText: 'Load Excel Word List',
+                downloadFileBtnText: 'Download Word List', // New translation key
+                downloadInfoText: '(Downloads example word list if no file is loaded)', // New translation key for download info
                 excelReminder: 'Please ensure the table is organized in the order of Word, Phonetic, Definition, Example Sentence, and Example Translation (five columns).',
                 exampleSentenceTitle: 'Example Sentence:',
                 readExampleBtnText: 'Read Example',
@@ -506,6 +543,7 @@
                 creatorNameContent: 'Xiaoman (Self-discipline Edition)', // New key for actual name
                 contactLabel: 'Contact:', // New key
                 customRequestText: 'Amazon Polly AI voice generation has limited free quota. Donations are welcome to maintain the long-term operation of this webpage. Kindly message or email to request my WeChat or provide payment QR code. Custom requests are also welcome via message or email. Thank you very much! ❤️',
+                pollyLangInfo: '', // Removed content for this key
                 // Auto Play Button States
                 autoPlayWordOnlyActive: '<i class="fas fa-pause"></i> Auto Playing Word',
                 autoPlayWordAndExampleActive: '<i class="fas fa-pause"></i> Auto Playing Word & Example',
@@ -528,7 +566,9 @@
                 msgSelectLanguage: 'Select Language',
                 msgLoadFailed: 'Load Failed',
                 msgSelectVoice: 'Select Voice...',
-                msgNoVoicesForLang: 'No voices found for the current language'
+                msgNoVoicesForLang: 'No voices found for the current language',
+                msgNoDataToDownload: 'No word data available to download. Please load a word list first.',
+                msgNoDownloadSupport: 'Your browser does not support file downloads. Please try using an updated browser.'
             }
         };
 
@@ -664,8 +704,7 @@
         async function loadAllPollyLanguagesAndVoices() {
             languageSelect.innerHTML = `<option value="">${uiTranslations[currentUILanguage].msgLoadingLanguages}</option>`;
             voiceSelect.innerHTML = `<option value="">${uiTranslations[currentUILanguage].msgLoadingVoices}</option>`;
-            document.getElementById('awsLoading').style.display = 'inline-block';
-            loadAwsVoicesBtn.disabled = true;
+            awsLoading.style.display = 'inline-block'; // Show spinner during voice loading
 
             try {
                 const response = await fetch(LAMBDA_VOICES_URL, {
@@ -712,8 +751,7 @@
                 voiceSelect.innerHTML = `<option value="">${uiTranslations[currentUILanguage].msgLoadFailed}</option>`;
                 showMessageBox('msgLoadVoicesFailed', { error: error.message });
             } finally {
-                document.getElementById('awsLoading').style.display = 'none';
-                loadAwsVoicesBtn.disabled = false;
+                awsLoading.style.display = 'none'; // Hide spinner after voice loading
                 console.log('--- End Debugging loadAllPollyLanguagesAndVoices ---');
             }
         }
@@ -819,7 +857,7 @@
                 return Promise.reject('No voice selected');
             }
 
-            document.getElementById('awsLoading').style.display = 'inline-block';
+            awsLoading.style.display = 'inline-block'; // Show spinner during TTS requests
 
             const selectedEngine = useNeuralEngineCheckbox.checked ? 'neural' : 'standard';
 
@@ -838,6 +876,8 @@
                 });
 
                 console.log('--- Debugging playText function (Amazon service) ---');
+                console.log('API Request URL:', LAMBDA_SYNTHESIZE_URL); // Log URL for playText
+                console.log('Request Body:', {text, voiceId, engine: selectedEngine, languageCode: correctedLang}); // Log body
                 console.log('Received HTTP Status:', response.status);
                 console.log('Received HTTP Status Text:', response.statusText);
                 console.log('Received Content-Type:', response.headers.get('Content-Type'));
@@ -889,7 +929,7 @@
                 showMessageBox('msgApiError', { error: error.message });
                 return Promise.reject(error); 
             } finally {
-                document.getElementById('awsLoading').style.display = 'none';
+                awsLoading.style.display = 'none'; // Hide spinner after TTS requests
             }
         }
 
@@ -908,17 +948,59 @@
         }
 
         /**
+         * Converts wordsData or exampleWordsData to CSV format and triggers a download.
+         */
+        function downloadWordList() {
+            let dataToDownload = wordsData.length > 0 ? wordsData : exampleWordsData;
+            let fileName = wordsData.length > 0 ? 'my_word_list.csv' : 'example_word_list.csv';
+
+            if (dataToDownload.length === 0) {
+                showMessageBox('msgNoDataToDownload');
+                return;
+            }
+
+            const headers = ['Word', 'Phonetic', 'Definition', 'Example', 'ExampleTranslation'];
+            let csvContent = headers.map(header => `"${header}"`).join(',') + '\n';
+
+            dataToDownload.forEach(row => {
+                const rowArray = [
+                    row.word,
+                    row.phonetic,
+                    row.definition,
+                    row.example,
+                    row.exampleTranslation
+                ];
+                // Escape double quotes and enclose fields in double quotes
+                csvContent += rowArray.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',') + '\n';
+            });
+
+            // Prepend UTF-8 BOM to resolve garbled characters in Excel
+            csvContent = '\uFEFF' + csvContent;
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) { // Feature detection for download attribute
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', fileName);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } else {
+                // Fallback for browsers that don't support download attribute
+                showMessageBox('msgNoDownloadSupport'); 
+            }
+        }
+
+
+        /**
          * Updates all static UI text based on the currentUILanguage.
          */
         function updateUILanguageText() {
             const translations = uiTranslations[currentUILanguage];
             console.log('Updating UI for language:', currentUILanguage);
-            console.log('Translations for customRequestText:', translations.customRequestText);
-            console.log('Translations for intervalLabelText:', translations.intervalLabelText);
-            console.log('Translations for creatorLabel:', translations.creatorLabel);
-            console.log('Translations for creatorNameContent:', translations.creatorNameContent);
-            console.log('Translations for contactLabel:', translations.contactLabel);
-
 
             htmlTitle.textContent = translations.htmlTitle;
             document.getElementById('appTitle').innerHTML = `<i class="fas fa-language"></i>${translations.appTitle}`;
@@ -928,15 +1010,22 @@
             document.getElementById('amazonTtsLabel').textContent = translations.amazonTtsLabel;
             document.getElementById('selectVoiceLabel').textContent = translations.selectVoiceLabel;
             document.getElementById('useNeuralEngineLabel').textContent = translations.useNeuralEngineLabel;
-            document.getElementById('loadVoicesBtnText').textContent = translations.loadVoicesBtnText;
+            // Removed loadVoicesBtnText from here
 
             // File loading
             document.getElementById('loadFileBtnText').textContent = translations.loadFileBtnText;
-            const excelReminderText = document.getElementById('excelReminderText');
-            if (excelReminderText) { 
-                excelReminderText.textContent = translations.excelReminder; 
+            document.getElementById('downloadFileBtnText').textContent = translations.downloadFileBtnText; // Update download button text
+            const excelReminderTextElement = document.getElementById('excelReminderText');
+            if (excelReminderTextElement) { 
+                excelReminderTextElement.textContent = translations.excelReminder; 
             } else {
                 console.warn('excelReminderText element not found!');
+            }
+            // Update download info text
+            if (downloadInfoText) {
+                downloadInfoText.textContent = translations.downloadInfoText;
+            } else {
+                console.warn('downloadInfoText element not found!');
             }
 
             // Example Sentence section (title only)
@@ -951,31 +1040,30 @@
             document.getElementById('autoPlayWithExampleBtnText').textContent = translations.autoPlayWithExampleBtnText;
             
             // Updated intervalLabelText - Get it here
-            const intervalLabelText = document.getElementById('intervalLabelText');
-            if (intervalLabelText) {
-                intervalLabelText.textContent = translations.intervalLabelText;
+            const intervalLabelTextElement = document.getElementById('intervalLabelText');
+            if (intervalLabelTextElement) {
+                intervalLabelTextElement.textContent = translations.intervalLabelText;
             } else {
                 console.warn('intervalLabelText element not found during updateUILanguageText!');
             }
 
-
             // Creator Info - Get elements here
-            const creatorLabel = document.getElementById('creatorLabel');
-            if (creatorLabel) {
-                creatorLabel.textContent = translations.creatorLabel;
+            const creatorLabelElement = document.getElementById('creatorLabel');
+            if (creatorLabelElement) {
+                creatorLabelElement.textContent = translations.creatorLabel;
             } else {
                 console.warn('creatorLabel element not found during updateUILanguageText!');
             }
-            const creatorNameContent = document.getElementById('creatorNameContent');
-            if (creatorNameContent) {
-                creatorNameContent.textContent = translations.creatorNameContent;
+            const creatorNameContentElement = document.getElementById('creatorNameContent');
+            if (creatorNameContentElement) {
+                creatorNameContentElement.textContent = translations.creatorNameContent;
             } else {
                 console.warn('creatorNameContent element not found during updateUILanguageText!');
             }
             
-            const contactLabel = document.getElementById('contactLabel');
-            if (contactLabel) {
-                contactLabel.textContent = translations.contactLabel;
+            const contactLabelElement = document.getElementById('contactLabel');
+            if (contactLabelElement) {
+                contactLabelElement.textContent = translations.contactLabel;
             } else {
                 console.warn('contactLabel element not found during updateUILanguageText!');
             }
@@ -987,6 +1075,8 @@
             } else {
                 console.warn('customRequestText element not found!');
             }
+
+            // Removed pollyLangInfoText update based on the revert request
 
             // Update auto play button states (their text might change based on active/inactive)
             updateAutoPlayButtonState();
@@ -1015,23 +1105,21 @@
             amazonConfigDiv.style.display = 'block';
             selectVoiceLabel.style.display = 'inline-block';
             voiceSelect.style.display = 'inline-block';
-            loadAwsVoicesBtn.style.display = 'inline-block';
+            // Removed loadAwsVoicesBtn related display properties
 
-            // Initial load of Polly languages and voices
+            // Initial load of Polly languages and voices - this will now happen automatically
             loadAllPollyLanguagesAndVoices();
             
-            // Language selector for Polly spoken language changes
+            // ADDED: Event listener for the Polly spoken language selector
             languageSelect.addEventListener('change', function() {
+                console.log('Polly Spoken Language changed to:', this.value);
                 loadVoiceOptionsForSelectedLanguage();
             });
 
             // Voice selection dropdown change (Polly voice)
             voiceSelect.addEventListener('change', updateNeuralEngineCheckbox);
 
-            // Load AWS Voices button click
-            loadAwsVoicesBtn.addEventListener('click', function() {
-                loadAllPollyLanguagesAndVoices(); 
-            });
+            // Removed loadAwsVoicesBtn.addEventListener
 
             // Excel file loading logic remains the same
             fileInput.addEventListener('change', function(e) {
@@ -1119,6 +1207,9 @@
             loadFileBtn.addEventListener('click', function() {
                 fileInput.click();
             });
+
+            // Add event listener for the new download button
+            downloadFileBtn.addEventListener('click', downloadWordList);
 
             playExampleBtn.addEventListener('click', function() {
                 const currentWord = wordsData[currentIndex];
@@ -1220,11 +1311,10 @@
                 updateUILanguageText();
                 const currentPollyLang = languageSelect.value;
                 populatePollyLanguageSelector();
-                languageSelect.value = currentPollyLang || '';
+                languageSelect.value = currentPollyLang || ''; 
                 loadVoiceOptionsForSelectedLanguage(); 
             });
         });
     </script>
 </body>
 </html>
-
