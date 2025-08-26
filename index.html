@@ -32,22 +32,33 @@
             transition: opacity 0.3s ease;
             margin-bottom: 0; /* 释义本身不需要额外的底部外边距，间距由例句的 margin-top 控制 */
         }
-        .example-sentence {
-            font-size: 1.1rem;
+        /* Styles for the entire example sentence block container */
+        .example-sentence { /* This class will only handle container-level styles */
             padding: 15px;
             background-color: #f0f8ff;
             border-radius: 5px;
-            margin-top: 10px; /* 恢复例句上方的空隙，与原始代码一致 */
+            margin-top: 10px;
             border-left: 4px solid #4682b4;
             transition: opacity 0.3s ease;
         }
-        .example-translation {
-            font-size: 1rem;
-            color: #666;
-            font-style: italic;
-            margin-top: 8px;
-            padding-left: 10px;
-            border-left: 2px solid #ccc;
+        /* Styles specifically for the example sentence text (the fourth column content) */
+        #exampleSentence {
+            font-size: 1.1rem; /* Revert to 1.1rem */
+            color: #212529; /* Standard dark text color */
+            font-style: normal; /* No italic */
+            line-height: 1.5; /* Default line height for better spacing */
+            margin-bottom: 5px; /* Small space below it */
+        }
+        /* Styles specifically for the example translation text (the fifth column content) */
+        #exampleTranslation {
+            font-size: 1.15rem; /* Adopt the previous exampleSentence font size */
+            color: #2c3e50; /* Adopt the previous exampleSentence color */
+            font-style: italic; /* Keep italic as per current exampleSentence */
+            line-height: 1.4; /* Adopt the previous exampleSentence line height */
+            margin-top: 8px; /* Space from the example sentence above */
+            padding-left: 0; /* Remove padding-left */
+            border-left: none; /* Remove border-left */
+            font-weight: normal; /* Remove lighter weight */
         }
         /* 修复点: 调整 .card-footer 样式以容纳固定按钮 */
         .card-footer {
@@ -288,6 +299,7 @@
                     <button class="btn btn-outline-primary" id="downloadFileBtn">
                         <i class="fas fa-download"></i> <span id="downloadFileBtnText">下载单词表</span>
                     </button>
+                    <span class="loading-spinner d-none" id="fileLoading"><i class="fas fa-spinner fa-spin"></i></span>
                     <span id="downloadInfoText" class="download-info-text">（未加载文件时下载示例单词表）</span>
                     <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
                     <!-- New reminder text -->
@@ -394,20 +406,19 @@
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
         const intervalInput = document.getElementById('intervalInput');
-        // Removed loadAwsVoicesBtn reference
         const languageSelect = document.getElementById('languageSelect'); // Polly spoken language selector
         const amazonConfigDiv = document.querySelector('.amazon-config'); // This div now contains all relevant Amazon config
         const voiceSelect = document.getElementById('voiceSelect');
         const useNeuralEngineCheckbox = document.getElementById('useNeuralEngine');
-        // UI Language selector DOM element
         const uiLanguageSelect = document.getElementById('uiLanguageSelect');
         const selectVoiceLabel = document.getElementById('selectVoiceLabel');
-        const excelReminderText = document.getElementById('excelReminderText'); // New DOM element for Excel reminder
-        // New DOM element for download button
+        const excelReminderText = document.getElementById('excelReminderText');
         const downloadFileBtn = document.getElementById('downloadFileBtn');
-        const downloadInfoText = document.getElementById('downloadInfoText'); // New DOM element for download info
-        const awsLoading = document.getElementById('awsLoading'); // Added reference for the moved spinner
+        const downloadInfoText = document.getElementById('downloadInfoText');
+        const awsLoading = document.getElementById('awsLoading');
 
+        // Spinner for file operations
+        const fileLoading = document.getElementById('fileLoading'); 
 
         // Example word data for download when no file is loaded
         const exampleWordsData = [
@@ -418,7 +429,7 @@
             { word: 'Computer', phonetic: '/kəmˈpjuːtər/', definition: '一种用于根据可变程序中的指令，通常以二进制形式存储和处理数据的电子设备', example: 'My computer is very fast.', exampleTranslation: '我的电脑速度很快。' },
             { word: 'Knowledge', phonetic: '/ˈɒlɪdʒ/', definition: '一个人通过经验或教育获得的知识、信息和技能；对某个主题的理论或实践理解', example: 'Knowledge is power.', exampleTranslation: '知识就是力量。' },
             { word: 'Success', phonetic: '/səkˈses/', definition: '实现目标或目的', example: 'Hard work is the key to success.', exampleTranslation: '努力工作是成功的关键。' },
-            { word: 'Challenge', phonetic: '/ˈtʃælɪndʒ/', definition: '呼吁某人参与竞争性情境或努力做某事', example: 'Facing new challenges helps us grow.', exampleTranslation: '面对新的挑战有助于我们成长。' }, // Fixed typo: TranslatedExample -> exampleTranslation
+            { word: 'Challenge', phonetic: '/ˈtʃælɪndʒ/', definition: '呼吁某人参与竞争性情境或努力做某事', example: 'Facing new challenges helps us grow.', exampleTranslation: '面对新的挑战有助于我们成长。' }, 
             { word: 'Explore', phonetic: '/ɪkˈsplɔːr/', definition: '旅行或穿过（不熟悉的国家或地区）以了解或熟悉它', example: 'Let\'s explore new possibilities.', exampleTranslation: '让我们探索新的可能性。' },
             { word: 'Improve', phonetic: '/ɪmˈprūv/', definition: '使或变得更好', example: 'We always strive to improve our skills.', exampleTranslation: '我们总是在努力提升我们的技能。' },
         ];
@@ -475,10 +486,9 @@
                 amazonTtsLabel: 'Amazon Polly（AI语音，已配置后端）',
                 selectVoiceLabel: '选择音色：',
                 useNeuralEngineLabel: '使用神经引擎（更自然）',
-                // loadVoicesBtnText: '加载音色', // Removed as button is gone
                 loadFileBtnText: '加载Excel单词表',
-                downloadFileBtnText: '下载单词表', // New translation key
-                downloadInfoText: '（未加载文件时下载示例单词表）', // New translation key for download info
+                downloadFileBtnText: '下载单词表',
+                downloadInfoText: '（未加载文件时下载示例单词表）',
                 excelReminder: '请确保表格按照单词、音标、释义、例句和例句翻译这五列的顺序进行组织。',
                 exampleSentenceTitle: '例句:',
                 readExampleBtnText: '朗读例句',
@@ -487,16 +497,14 @@
                 nextBtnText: '下一个',
                 autoPlayBtnText: '自动播放',
                 autoPlayWithExampleBtnText: '自动播放（带例句）',
-                intervalLabelText: '播放间隔(秒):', // Updated key for consistency
-                creatorLabel: '创建者：', // New key
-                creatorNameContent: '小满(自律版）', // New key for actual name
-                contactLabel: '联系方式：', // New key
+                intervalLabelText: '播放间隔(秒):',
+                creatorLabel: '创建者：',
+                creatorNameContent: '小满(自律版）',
+                contactLabel: '联系方式：',
                 customRequestText: 'Amazon Polly AI语音生成的免费额度有限，接受捐赠用于维护此网页长期正常运行，好心人可私信或来邮申请加本人微信或提供收款码，如有定制需求也欢迎私信或来邮,非常感谢！ ❤️',
-                pollyLangInfo: '', // Removed content for this key
-                // Auto Play Button States
+                pollyLangInfo: '', 
                 autoPlayWordOnlyActive: '<i class="fas fa-pause"></i> 正在自动播放单词',
                 autoPlayWordAndExampleActive: '<i class="fas fa-pause"></i> 正在自动播放单词和例句',
-                // Messages
                 msgNoVoiceSelected: '请先加载并选择一个 Amazon Polly 音色。',
                 msgLoadVoicesFailed: '加载音色失败: {error}。请检查控制台获取更多详情。',
                 msgApiError: '语音合成失败: {error}。', 
@@ -517,7 +525,8 @@
                 msgSelectVoice: '选择音色...',
                 msgNoVoicesForLang: '未找到适合当前语言的音色',
                 msgNoDataToDownload: '没有可下载的单词数据。请先加载一个单词表。',
-                msgNoDownloadSupport: '您的浏览器不支持文件下载。请尝试使用最新版浏览器。'
+                msgNoDownloadSupport: '您的浏览器不支持文件下载。请尝试使用最新版浏览器。',
+                msgMobilePlaybackBlocked: '您的浏览器可能阻止了自动播放音频。请尝试手动播放或点击屏幕以允许播放。',
             },
             'en-US': {
                 htmlTitle: 'Multilingual Smart Word Learning & Dictation Assistant',
@@ -526,10 +535,9 @@
                 amazonTtsLabel: 'Amazon Polly (AI Voice, Backend Configured)',
                 selectVoiceLabel: 'Select Voice:',
                 useNeuralEngineLabel: 'Use Neural Engine (More Natural)',
-                // loadVoicesBtnText: 'Load Voices', // Removed as button is gone
                 loadFileBtnText: 'Load Excel Word List',
-                downloadFileBtnText: 'Download Word List', // New translation key
-                downloadInfoText: '(Downloads example word list if no file is loaded)', // New translation key for download info
+                downloadFileBtnText: 'Download Word List',
+                downloadInfoText: '(Downloads example word list if no file is loaded)',
                 excelReminder: 'Please ensure the table is organized in the order of Word, Phonetic, Definition, Example Sentence, and Example Translation (five columns).',
                 exampleSentenceTitle: 'Example Sentence:',
                 readExampleBtnText: 'Read Example',
@@ -538,19 +546,17 @@
                 nextBtnText: 'Next',
                 autoPlayBtnText: 'Auto Play',
                 autoPlayWithExampleBtnText: 'Auto Play (with Example)',
-                intervalLabelText: 'Play Interval (seconds):', // Updated key for consistency
-                creatorLabel: 'Created by:', // New key
-                creatorNameContent: 'Xiaoman (Self-discipline Edition)', // New key for actual name
-                contactLabel: 'Contact:', // New key
+                intervalLabelText: 'Play Interval (seconds):',
+                creatorLabel: 'Created by:',
+                creatorNameContent: 'Xiaoman (Self-discipline Edition)',
+                contactLabel: 'Contact:',
                 customRequestText: 'Amazon Polly AI voice generation has limited free quota. Donations are welcome to maintain the long-term operation of this webpage. Kindly message or email to request my WeChat or provide payment QR code. Custom requests are also welcome via message or email. Thank you very much! ❤️',
-                pollyLangInfo: '', // Removed content for this key
-                // Auto Play Button States
+                pollyLangInfo: '', 
                 autoPlayWordOnlyActive: '<i class="fas fa-pause"></i> Auto Playing Word',
                 autoPlayWordAndExampleActive: '<i class="fas fa-pause"></i> Auto Playing Word & Example',
-                // Messages
                 msgNoVoiceSelected: 'Please load and select an Amazon Polly voice first.',
                 msgLoadVoicesFailed: 'Failed to load voices: {error}. Check console for more details.',
-                msgApiError: 'Speech synthesis failed: {error}.', 
+                msgApiError: 'Speech synthesis failed: {error}。', 
                 msgExcelReadFailed: 'Failed to read Excel file. Please ensure the file format is correct.',
                 msgNoWorksheet: 'No worksheet found in the Excel file.',
                 msgNoDataInSheet: 'No data found in the Excel file!',
@@ -568,7 +574,8 @@
                 msgSelectVoice: 'Select Voice...',
                 msgNoVoicesForLang: 'No voices found for the current language',
                 msgNoDataToDownload: 'No word data available to download. Please load a word list first.',
-                msgNoDownloadSupport: 'Your browser does not support file downloads. Please try using an updated browser.'
+                msgNoDownloadSupport: 'Your browser does not support file downloads. Please try using an updated browser.',
+                msgMobilePlaybackBlocked: 'Your browser might be blocking automatic audio playback. Please try playing manually or tap the screen to allow playback.',
             }
         };
 
@@ -841,14 +848,14 @@
             }
         }
 
-        function getCurrentTTSService() {
-            return 'amazon'; 
-        }
-
         /**
          * Plays text using Amazon Polly TTS.
+         * @param {string} text The text to synthesize.
+         * @param {string} lang The language code for the text.
+         * @param {string} [textType='text'] The text type ('text' or 'ssml').
+         * @returns {Promise<void>} A promise that resolves when audio playback ends.
          */
-        async function playText(text, lang) {
+        async function playText(text, lang, textType = 'text') {
             const correctedLang = lang.replace(/_/g, '-');
             
             const voiceId = voiceSelect.value;
@@ -871,27 +878,47 @@
                         text: text,
                         voiceId: voiceId,
                         engine: selectedEngine,
-                        languageCode: correctedLang
+                        languageCode: correctedLang, // Passed to Lambda for voice info
+                        textType: textType // Pass textType to Lambda
                     }),
                 });
 
                 console.log('--- Debugging playText function (Amazon service) ---');
-                console.log('API Request URL:', LAMBDA_SYNTHESIZE_URL); // Log URL for playText
-                console.log('Request Body:', {text, voiceId, engine: selectedEngine, languageCode: correctedLang}); // Log body
+                console.log('API Request URL:', LAMBDA_SYNTHESIZE_URL);
+                console.log('Request Body:', {text, voiceId, engine: selectedEngine, languageCode: correctedLang, textType});
                 console.log('Received HTTP Status:', response.status);
                 console.log('Received HTTP Status Text:', response.statusText);
                 console.log('Received Content-Type:', response.headers.get('Content-Type'));
 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ message: 'API request failed (non-JSON error)' }));
-                    throw new Error(errorData.message || 'API request failed');
+                    let errorData;
+                    const contentType = response.headers.get('Content-Type');
+                    if (contentType && contentType.includes('application/json')) {
+                        errorData = await response.json();
+                    } else {
+                        errorData = { message: await response.text() }; // Read as text if not JSON
+                    }
+                    throw new Error(errorData.message || `API request failed with status ${response.status}`);
                 }
 
-                const responseJson = await response.json();
-                const audioBase64 = responseJson.audioBase64;
+                let audioBase64;
+                const contentType = response.headers.get('Content-Type');
 
-                if (!audioBase64) {
-                    throw new Error('msgBackendNoAudio');
+                // FIX: Handle both raw Base64 and JSON with audioBase64 property
+                if (contentType && contentType.includes('audio/mpeg')) {
+                    // If Lambda returns raw Base64 audio directly (as observed from error)
+                    audioBase64 = await response.text(); // Read as raw text
+                    console.log('Received raw audio/mpeg Base64 string for playback.');
+                } else if (contentType && contentType.includes('application/json')) {
+                    // If Lambda returns JSON with audioBase64 property (preferred)
+                    const responseJson = await response.json();
+                    audioBase64 = responseJson.audioBase64;
+                    console.log('Received JSON with audioBase64 property for playback.');
+                    if (!audioBase64) {
+                        throw new Error('msgBackendNoAudio');
+                    }
+                } else {
+                    throw new Error(`Unexpected Content-Type for playback: ${contentType}`);
                 }
                 
                 const byteCharacters = atob(audioBase64);
@@ -912,13 +939,23 @@
                     };
                     audio.onerror = (e) => {
                         console.error('Audio playback failed:', e.target.error);
-                        showMessageBox('msgApiError', { error: 'Audio playback failed' });
+                        // Check if it's a mobile autoplay prevention error
+                        if (e.target.error.name === 'NotAllowedError' || e.target.error.name === 'AbortError') {
+                            showMessageBox('msgMobilePlaybackBlocked');
+                        } else {
+                            showMessageBox('msgApiError', { error: 'Audio playback failed' });
+                        }
                         URL.revokeObjectURL(audioUrl);
                         resolve(); 
                     };
                     audio.play().catch((playError) => {
                         console.error('Audio playback prevented or failed:', playError);
-                        showMessageBox('msgApiError', { error: 'Audio playback prevented or failed' });
+                        // Check if it's a mobile autoplay prevention error
+                        if (playError.name === 'NotAllowedError' || playError.name === 'AbortError') {
+                             showMessageBox('msgMobilePlaybackBlocked');
+                        } else {
+                            showMessageBox('msgApiError', { error: 'Audio playback prevented or failed' });
+                        }
                         URL.revokeObjectURL(audioUrl);
                         resolve(); 
                     });
@@ -994,6 +1031,9 @@
             }
         }
 
+        // Removed the escapeXml function as it's no longer needed without SSML downloads
+
+        // Removed generateAndDownloadMp3 function and related logic.
 
         /**
          * Updates all static UI text based on the currentUILanguage.
@@ -1027,6 +1067,8 @@
             } else {
                 console.warn('downloadInfoText element not found!');
             }
+
+            // Removed new MP3 generation buttons from UI update
 
             // Example Sentence section (title only)
             document.getElementById('exampleSentenceTitle').innerHTML = `<h6><i class="fas fa-comment-dots"></i> ${translations.exampleSentenceTitle}</h6>`;
@@ -1085,7 +1127,7 @@
             const currentPollyLang = languageSelect.value;
             populatePollyLanguageSelector(); 
             languageSelect.value = currentPollyLang || ''; 
-
+            // After populating the selector, ensure the correct voice options are loaded for the selected language
             loadVoiceOptionsForSelectedLanguage(); 
         }
 
@@ -1131,6 +1173,8 @@
                 }
                 console.log('已选择文件:', file.name, '类型:', file.type, '大小:', file.size, '字节');
 
+                fileLoading.classList.remove('d-none'); // Show spinner for file loading
+
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     console.log('FileReader: 文件读取成功。');
@@ -1142,6 +1186,7 @@
                     } catch (error) {
                         console.error('XLSX: 读取工作簿失败:', error);
                         showMessageBox('msgExcelReadFailed');
+                        fileLoading.classList.add('d-none'); // Hide spinner on error
                         return;
                     }
                     
@@ -1149,6 +1194,7 @@
                     if (!firstSheetName) {
                         console.error('XLSX: 工作簿中没有找到任何工作表名称。');
                         showMessageBox('msgNoWorksheet');
+                        fileLoading.classList.add('d-none'); // Hide spinner on error
                         return;
                     }
                     console.log('XLSX: 第一张工作表名称:', firstSheetName);
@@ -1157,6 +1203,7 @@
                     if (!worksheet) {
                          console.error('XLSX: 无法获取第一张工作表。');
                          showMessageBox('msgNoWorksheet'); 
+                         fileLoading.classList.add('d-none'); // Hide spinner on error
                          return;
                     }
                     console.log('XLSX: 获取工作表成功。工作表范围:', worksheet['!ref']);
@@ -1169,6 +1216,7 @@
                     } catch (error) {
                         console.error('XLSX: 将工作表转换为 JSON 失败:', error);
                         showMessageBox('msgExcelConvertFailed');
+                        fileLoading.classList.add('d-none'); // Hide spinner on error
                         return;
                     }
                     
@@ -1196,10 +1244,12 @@
                         console.warn('No data found in the Excel file! jsonData is empty.');
                         showMessageBox('msgNoDataInSheet');
                     }
+                    fileLoading.classList.add('d-none'); // Hide spinner on success
                 };
                 reader.onerror = function(e) {
                     console.error('FileReader: File reading error:', e);
                     showMessageBox('msgFileReaderError');
+                    fileLoading.classList.add('d-none'); // Hide spinner on error
                 };
                 reader.readAsArrayBuffer(file);
             });
@@ -1210,6 +1260,11 @@
 
             // Add event listener for the new download button
             downloadFileBtn.addEventListener('click', downloadWordList);
+
+            // Removed event listeners for MP3 generation buttons
+            // generateWordMp3Btn.addEventListener('click', () => generateAndDownloadMp3('wordOnly'));
+            // generateExampleMp3Btn.addEventListener('click', () => generateAndDownloadMp3('wordWithExample'));
+
 
             playExampleBtn.addEventListener('click', function() {
                 const currentWord = wordsData[currentIndex];
@@ -1302,7 +1357,7 @@
                     } else {
                         stopAutoPlay();
                     }
-                }, intervalTime + (currentAutoPlayMode === 'wordWithExample' ? 1000 : 0)); 
+                }, intervalTime + (currentAutoPlayMode === 'wordWithExample' ? 4000 : 0)); 
             }
             
             uiLanguageSelect.addEventListener('change', function() {
@@ -1310,7 +1365,7 @@
                 currentUILanguage = this.value;
                 updateUILanguageText();
                 const currentPollyLang = languageSelect.value;
-                populatePollyLanguageSelector();
+                populatePollyLanguageSelector(); 
                 languageSelect.value = currentPollyLang || ''; 
                 loadVoiceOptionsForSelectedLanguage(); 
             });
