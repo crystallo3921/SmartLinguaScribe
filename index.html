@@ -44,16 +44,16 @@
         /* Styles specifically for the example sentence text (the fourth column content) */
         #exampleSentence {
             font-size: 1.1rem; /* Revert to 1.1rem */
-            color: #212529; /* Standard dark text color */
-            font-style: normal; /* No italic */
+            color: #34495e; /* Deep blue from "再之前" */
+            font-style: italic; /* Italic from "再之前" */
             line-height: 1.5; /* Default line height for better spacing */
             margin-bottom: 5px; /* Small space below it */
         }
         /* Styles specifically for the example translation text (the fifth column content) */
         #exampleTranslation {
-            font-size: 1rem; /* Adopt the previous exampleSentence font size */
-            color: #2c3e50; /* Adopt the previous exampleSentence color */
-            font-style: italic; /* Keep italic as per current exampleSentence */
+            font-size: 1rem; /* Smaller than exampleSentence */
+            color: #212529; /* Standard dark text color, from "现在例句的" */
+            font-style: normal; /* No italic, from "现在例句的" */
             line-height: 1.3; /* Adopt the previous exampleSentence line height */
             margin-top: 8px; /* Space from the example sentence above */
             padding-left: 0; /* Remove padding-left */
@@ -621,6 +621,40 @@
         }
 
         /**
+         * Disables or enables a set of control buttons/inputs.
+         * @param {boolean} disable - True to disable, false to enable.
+         */
+        function toggleControlButtons(disable) {
+            // Disable/enable general controls
+            loadFileBtn.disabled = disable;
+            downloadFileBtn.disabled = disable;
+            playBtn.disabled = disable;
+            prevBtn.disabled = disable;
+            nextBtn.disabled = disable;
+            playExampleBtn.disabled = disable;
+            intervalInput.disabled = disable;
+            languageSelect.disabled = disable;
+            voiceSelect.disabled = disable;
+            useNeuralEngineCheckbox.disabled = disable;
+
+            if (disable) { // An auto-play mode is starting
+                if (currentAutoPlayMode === 'wordOnly') {
+                    autoPlayBtn.disabled = false; // "Auto Play" is active, keep it enabled
+                    autoPlayWithExampleBtn.disabled = true; // Disable "Auto Play (with Example)"
+                } else if (currentAutoPlayMode === 'wordWithExample') {
+                    autoPlayBtn.disabled = true; // Disable "Auto Play"
+                    autoPlayWithExampleBtn.disabled = false; // "Auto Play (with Example)" is active, keep it enabled
+                }
+                awsLoading.style.display = 'inline-block';
+            } else { // Auto-play is stopping
+                autoPlayBtn.disabled = false; // Re-enable both auto-play buttons
+                autoPlayWithExampleBtn.disabled = false;
+                awsLoading.style.display = 'none';
+            }
+        }
+
+
+        /**
          * Stops all ongoing auto-play and speech synthesis.
          */
         function stopAutoPlay() {
@@ -630,6 +664,7 @@
             }
             currentAutoPlayMode = 'none';
             updateAutoPlayButtonState();
+            toggleControlButtons(false); // Enable all buttons when auto-play stops
         }
 
         /**
@@ -755,7 +790,7 @@
             } catch (error) {
                 console.error('Failed to load all Polly languages and voices:', error);
                 languageSelect.innerHTML = `<option value="">${uiTranslations[currentUILanguage].msgLoadFailed}</option>`;
-                voiceSelect.innerHTML = `<option value="">${uiTranslations[currentUILanguage].msgLoadFailed}</option>`;
+                voiceSelect.innerHTML = `<option value="">${uiTranslations[currentUILanguage].msgLoadFailed}</option`;
                 showMessageBox('msgLoadVoicesFailed', { error: error.message });
             } finally {
                 awsLoading.style.display = 'none'; // Hide spinner after voice loading
@@ -864,7 +899,7 @@
                 return Promise.reject('No voice selected');
             }
 
-            awsLoading.style.display = 'inline-block'; // Show spinner during TTS requests
+            // awsLoading.style.display = 'inline-block'; // Handled by toggleControlButtons
 
             const selectedEngine = useNeuralEngineCheckbox.checked ? 'neural' : 'standard';
 
@@ -966,7 +1001,7 @@
                 showMessageBox('msgApiError', { error: error.message });
                 return Promise.reject(error); 
             } finally {
-                awsLoading.style.display = 'none'; // Hide spinner after TTS requests
+                // awsLoading.style.display = 'none'; // Handled by toggleControlButtons in stopAutoPlay
             }
         }
 
@@ -1031,10 +1066,6 @@
             }
         }
 
-        // Removed the escapeXml function as it's no longer needed without SSML downloads
-
-        // Removed generateAndDownloadMp3 function and related logic.
-
         /**
          * Updates all static UI text based on the currentUILanguage.
          */
@@ -1050,7 +1081,6 @@
             document.getElementById('amazonTtsLabel').textContent = translations.amazonTtsLabel;
             document.getElementById('selectVoiceLabel').textContent = translations.selectVoiceLabel;
             document.getElementById('useNeuralEngineLabel').textContent = translations.useNeuralEngineLabel;
-            // Removed loadVoicesBtnText from here
 
             // File loading
             document.getElementById('loadFileBtnText').textContent = translations.loadFileBtnText;
@@ -1067,8 +1097,6 @@
             } else {
                 console.warn('downloadInfoText element not found!');
             }
-
-            // Removed new MP3 generation buttons from UI update
 
             // Example Sentence section (title only)
             document.getElementById('exampleSentenceTitle').innerHTML = `<h6><i class="fas fa-comment-dots"></i> ${translations.exampleSentenceTitle}</h6>`;
@@ -1118,8 +1146,6 @@
                 console.warn('customRequestText element not found!');
             }
 
-            // Removed pollyLangInfoText update based on the revert request
-
             // Update auto play button states (their text might change based on active/inactive)
             updateAutoPlayButtonState();
 
@@ -1147,7 +1173,6 @@
             amazonConfigDiv.style.display = 'block';
             selectVoiceLabel.style.display = 'inline-block';
             voiceSelect.style.display = 'inline-block';
-            // Removed loadAwsVoicesBtn related display properties
 
             // Initial load of Polly languages and voices - this will now happen automatically
             loadAllPollyLanguagesAndVoices();
@@ -1160,8 +1185,6 @@
 
             // Voice selection dropdown change (Polly voice)
             voiceSelect.addEventListener('change', updateNeuralEngineCheckbox);
-
-            // Removed loadAwsVoicesBtn.addEventListener
 
             // Excel file loading logic remains the same
             fileInput.addEventListener('change', function(e) {
@@ -1255,18 +1278,19 @@
             });
             
             loadFileBtn.addEventListener('click', function() {
+                if (loadFileBtn.disabled) return; // Prevent action if disabled
                 fileInput.click();
             });
 
             // Add event listener for the new download button
-            downloadFileBtn.addEventListener('click', downloadWordList);
-
-            // Removed event listeners for MP3 generation buttons
-            // generateWordMp3Btn.addEventListener('click', () => generateAndDownloadMp3('wordOnly'));
-            // generateExampleMp3Btn.addEventListener('click', () => generateAndDownloadMp3('wordWithExample'));
-
+            downloadFileBtn.addEventListener('click', function() {
+                if (downloadFileBtn.disabled) return; // Prevent action if disabled
+                downloadWordList();
+            });
 
             playExampleBtn.addEventListener('click', function() {
+                if (playExampleBtn.disabled) return; // Prevent action if disabled
+                // This button will be disabled by toggleControlButtons(true) when auto-play is active
                 const currentWord = wordsData[currentIndex];
                 if (!currentWord || !currentWord.example) return;
                 
@@ -1275,14 +1299,16 @@
             });
 
             playBtn.addEventListener('click', function() {
+                if (playBtn.disabled) return; // Prevent action if disabled
+                // This button will be disabled by toggleControlButtons(true) when auto-play is active
                 if (wordsData.length === 0) { showMessageBox('msgPleaseLoadExcel'); return; }
-                stopAutoPlay();
                 playCurrentWord();
             });
 
             prevBtn.addEventListener('click', function() {
+                if (prevBtn.disabled) return; // Prevent action if disabled
+                // This button will be disabled by toggleControlButtons(true) when auto-play is active
                 if (wordsData.length === 0) { showMessageBox('msgPleaseLoadExcel'); return; }
-                stopAutoPlay();
                 
                 currentIndex = (currentIndex - 1 + wordsData.length) % wordsData.length;
                 displayWordOnly();
@@ -1291,8 +1317,9 @@
             });
 
             nextBtn.addEventListener('click', function() {
+                if (nextBtn.disabled) return; // Prevent action if disabled
+                // This button will be disabled by toggleControlButtons(true) when auto-play is active
                 if (wordsData.length === 0) { showMessageBox('msgPleaseLoadExcel'); return; }
-                stopAutoPlay();
                 
                 currentIndex = (currentIndex + 1) % wordsData.length;
                 displayWordOnly();
@@ -1307,11 +1334,12 @@
                 }
                 
                 if (currentAutoPlayMode === 'wordOnly') {
-                    stopAutoPlay();
+                    stopAutoPlay(); // Stop auto-play if it's already running in this mode
                 } else {
-                    stopAutoPlay();
+                    stopAutoPlay(); // Stop any other active auto-play mode (this will re-enable all buttons)
                     currentAutoPlayMode = 'wordOnly';
                     updateAutoPlayButtonState();
+                    toggleControlButtons(true); // Disable other buttons, and the *other* auto-play button
                     startAutoPlay();
                 }
             });
@@ -1323,11 +1351,12 @@
                 }
                 
                 if (currentAutoPlayMode === 'wordWithExample') {
-                    stopAutoPlay();
+                    stopAutoPlay(); // Stop auto-play if it's already running in this mode
                 } else {
-                    stopAutoPlay();
+                    stopAutoPlay(); // Stop any other active auto-play mode (this will re-enable all buttons)
                     currentAutoPlayMode = 'wordWithExample';
                     updateAutoPlayButtonState();
+                    toggleControlButtons(true); // Disable other buttons, and the *other* auto-play button
                     startAutoPlay();
                 }
             });
@@ -1373,5 +1402,3 @@
     </script>
 </body>
 </html>
-
-
